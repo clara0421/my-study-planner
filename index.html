@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#ffffff" />
+    <title>Study Planner</title>
+    <link rel="stylesheet" href="style.css" />
+    <script src="script.js" defer></script>
+  </head>
+  <body>
+    <main class="app">
+      <header class="page-header">
+        <div>
+          <p class="eyebrow">나만의 학습 공간</p>
+          <h1>Study Planner <span aria-hidden="true">✦</span></h1>
+          <p class="subtitle">작은 계획이 모여 큰 성장을 만들어요.</p>
+        </div>
+        <div class="today-badge" id="today-label"></div>
+      </header>
+
+      <section class="progress-card" aria-labelledby="progress-title">
+        <div class="progress-top">
+          <div>
+            <p class="section-kicker">MY PROGRESS</p>
+            <h2 id="progress-title">전체 학습 진행률</h2>
+          </div>
+          <p class="progress-count" id="progress-count">0 / 0 완료</p>
+        </div>
+        <div
+          class="progress-track"
+          id="progress-track"
+          role="progressbar"
+          aria-label="학습 진행률"
+          aria-valuemin="0"
+          aria-valuemax="100"
+          aria-valuenow="0"
+        >
+          <div class="progress-fill" id="progress-fill"></div>
+        </div>
+        <p class="progress-message" id="progress-message">첫 번째 학습 일정을 추가해 보세요!</p>
+      </section>
+
+      <section class="planner-layout">
+        <section class="form-card" aria-labelledby="form-title">
+          <div class="section-heading">
+            <span class="heading-icon" aria-hidden="true">＋</span>
+            <div>
+              <p class="section-kicker">PLAN YOUR STUDY</p>
+              <h2 id="form-title">학습 일정 추가</h2>
+            </div>
+          </div>
+          <form id="schedule-form">
+            <label for="subject">과목명</label>
+            <input
+              id="subject"
+              name="subject"
+              type="text"
+              maxlength="60"
+              placeholder="예: 자료구조"
+              required
+            />
+
+            <fieldset class="course-color-fieldset" id="course-color-fieldset">
+              <legend>과목 색상</legend>
+              <div class="color-palette" id="new-course-palette" role="radiogroup" aria-label="새 과목 색상 선택">
+                <label class="color-choice" title="파스텔 블루">
+                  <input type="radio" name="subjectColor" value="blue" checked />
+                  <span class="color-swatch color-swatch--blue"></span>
+                  <span class="visually-hidden">파스텔 블루</span>
+                </label>
+                <label class="color-choice" title="파스텔 핑크">
+                  <input type="radio" name="subjectColor" value="pink" />
+                  <span class="color-swatch color-swatch--pink"></span>
+                  <span class="visually-hidden">파스텔 핑크</span>
+                </label>
+                <label class="color-choice" title="파스텔 그린">
+                  <input type="radio" name="subjectColor" value="green" />
+                  <span class="color-swatch color-swatch--green"></span>
+                  <span class="visually-hidden">파스텔 그린</span>
+                </label>
+                <label class="color-choice" title="파스텔 옐로">
+                  <input type="radio" name="subjectColor" value="yellow" />
+                  <span class="color-swatch color-swatch--yellow"></span>
+                  <span class="visually-hidden">파스텔 옐로</span>
+                </label>
+                <label class="color-choice" title="파스텔 퍼플">
+                  <input type="radio" name="subjectColor" value="purple" />
+                  <span class="color-swatch color-swatch--purple"></span>
+                  <span class="visually-hidden">파스텔 퍼플</span>
+                </label>
+              </div>
+              <p class="color-help" id="course-color-help">새 과목에 사용할 색상을 선택하세요.</p>
+            </fieldset>
+
+            <label for="content">학습 내용</label>
+            <textarea
+              id="content"
+              name="content"
+              rows="3"
+              maxlength="240"
+              placeholder="오늘 공부할 내용을 적어 보세요"
+              required
+            ></textarea>
+
+            <label for="deadline">마감일</label>
+            <input id="deadline" name="deadline" type="date" required />
+
+            <button class="primary-button" type="submit">일정 추가하기 <span aria-hidden="true">→</span></button>
+          </form>
+        </section>
+
+      </section>
+      <section class="schedule-section" aria-labelledby="schedule-title">
+        <div class="list-header">
+          <div>
+            <p class="section-kicker">YOUR TO-DO LIST</p>
+            <h2 id="schedule-title">등록된 학습 일정</h2>
+          </div>
+          <span class="schedule-total" id="schedule-total">0개</span>
+        </div>
+        <p class="storage-status" id="storage-status" role="status" aria-live="polite" hidden></p>
+        <div class="schedule-list" id="schedule-list" aria-live="polite"></div>
+      </section>
+      <section class="server-check" aria-label="서버 상태 확인">
+        <button class="server-check-button" id="server-check-button" type="button">서버 확인</button>
+        <p class="server-check-message" id="server-check-message" role="status" aria-live="polite" hidden></p>
+      </section>
+      <footer>나만의 속도로, 꾸준하게 <span aria-hidden="true">🌱</span></footer>
+    </main>
+  </body>
+</html>
