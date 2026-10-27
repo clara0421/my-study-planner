@@ -2,68 +2,24 @@
 
 const express = require("express");
 const { randomUUID } = require("node:crypto");
-const fs = require("node:fs/promises");
 const path = require("node:path");
 
 const app = express();
 const port = process.env.PORT === undefined ? 3000 : Number(process.env.PORT);
 const host = "127.0.0.1";
-const dataDirectory = process.env.STUDY_PLANNER_DATA_DIR || path.join(__dirname, "data");
-const dataFile = path.join(dataDirectory, "study-planner.json");
 const allowedColors = new Set(["blue", "pink", "green", "yellow", "purple"]);
 const maxHistoryEntries = 1000;
 
-let store;
-let mutationQueue = Promise.resolve();
+const { readStore, mutateStore: runMutation } = require("./storage");
 
 app.use(express.json({ limit: "1mb" }));
+app.use("/api", (request, response, next) => {
+  response.set("Cache-Control", "no-store");
+  next();
+});
 
 function normalizeSubject(subject) {
   return subject.trim().toLocaleLowerCase();
-}
-
-function createEmptyStore() {
-  return {
-    version: 1,
-    courses: [],
-    schedules: [],
-    history: [],
-    migrationCompleted: false,
-  };
-}
-
-async function persistStore(nextStore) {
-  await fs.mkdir(dataDirectory, { recursive: true });
-  const temporaryFile = `${dataFile}.tmp`;
-  await fs.writeFile(temporaryFile, `${JSON.stringify(nextStore, null, 2)}\n`, "utf8");
-  await fs.rename(temporaryFile, dataFile);
-}
-
-async function loadStore() {
-  try {
-    const savedData = await fs.readFile(dataFile, "utf8");
-    const parsedData = JSON.parse(savedData);
-    if (
-      !parsedData
-      || parsedData.version !== 1
-      || !Array.isArray(parsedData.courses)
-      || !Array.isArray(parsedData.schedules)
-      || !Array.isArray(parsedData.history)
-    ) {
-      throw new TypeError("저장된 데이터 파일 형식이 올바르지 않습니다.");
-    }
-
-    return {
-      ...parsedData,
-      migrationCompleted: Boolean(parsedData.migrationCompleted),
-    };
-  } catch (error) {
-    if (error.code !== "ENOENT") throw error;
-
-    const initialStore = createEmptyStore();
-    await persistStore(initialStore);
-    return initialStore;
-  }
 }
 
 function addHistory(targetStore, action, details) {
@@ -175,28 +131,17 @@ function normalizeLegacySchedules(legacySchedules) {
   return { schedules, courses: [...courses.values()] };
 }
 
-function runMutation(mutator) {
-  const operation = mutationQueue.then(async () => {
-    const nextStore = structuredClone(store);
-    const result = mutator(nextStore);
-    await persistStore(nextStore);
-    store = nextStore;
-    return result;
-  });
-  mutationQueue = operation.catch(() => {});
-  return operation;
-}
-
 function sendError(response, status, message) {
   response.status(status).json({ error: message });
 }
 
-app.get("/api/health", (request, response) => {
+app.get("/api/health", async (request, response) => {
+  await readStore();
   response.type("text/plain; charset=utf-8").send("서버가 정상적으로 작동하고 있습니다.");
 });
 
 app.get("/api/schedules", async (request, response) => {
-  await mutationQueue;
+  const store = await readStore();
   response.set("Cache-Control", "no-store").json(publicData(store));
 });
 
@@ -204,7 +149,7 @@ app.post("/api/schedules", async (request, response) => {
   const validated = validateScheduleFields(request.body || {});
   if (validated.error) return sendError(response, 400, validated.error);
 
-  await runMutation((nextStore) => {
+  const savedStore = await runMutation((nextStore) => {
     const { subject, content, deadline } = validated.fields;
     const requestedColor = request.body.color;
     ensureCourse(
@@ -227,8 +172,7 @@ app.post("/api/schedules", async (request, response) => {
     return schedule.id;
   });
 
-  await mutationQueue;
-  response.status(201).json(publicData(store));
+  response.status(201).json(publicData(savedStore));
 });
 
 app.patch("/api/schedules/:id", async (request, response) => {
@@ -242,7 +186,7 @@ app.patch("/api/schedules/:id", async (request, response) => {
     return sendError(response, 400, "완료 상태는 true 또는 false여야 합니다.");
   }
 
-  await runMutation((nextStore) => {
+  const savedStore = await runMutation((nextStore) => {
     const schedule = nextStore.schedules.find((item) => item.id === id);
     if (!schedule) throw Object.assign(new Error("해당 학습 일정을 찾을 수 없습니다."), { status: 404 });
     const validated = validateScheduleFields({ ...schedule, ...body });
@@ -267,13 +211,12 @@ app.patch("/api/schedules/:id", async (request, response) => {
     });
   });
 
-  await mutationQueue;
-  response.json(publicData(store));
+  response.json(publicData(savedStore));
 });
 
 app.delete("/api/schedules/:id", async (request, response) => {
   const { id } = request.params;
-  await runMutation((nextStore) => {
+  const savedStore = await runMutation((nextStore) => {
     const index = nextStore.schedules.findIndex((item) => item.id === id);
     if (index < 0) throw Object.assign(new Error("해당 학습 일정을 찾을 수 없습니다."), { status: 404 });
     const [deletedSchedule] = nextStore.schedules.splice(index, 1);
@@ -283,8 +226,7 @@ app.delete("/api/schedules/:id", async (request, response) => {
     });
   });
 
-  await mutationQueue;
-  response.json(publicData(store));
+  response.json(publicData(savedStore));
 });
 
 app.patch("/api/courses/:subject/color", async (request, response) => {
@@ -293,7 +235,7 @@ app.patch("/api/courses/:subject/color", async (request, response) => {
   if (!subject) return sendError(response, 400, "과목명이 필요합니다.");
   if (!allowedColors.has(color)) return sendError(response, 400, "지원하지 않는 과목 색상입니다.");
 
-  await runMutation((nextStore) => {
+  const savedStore = await runMutation((nextStore) => {
     const targetCourse = findCourse(nextStore, subject);
     if (!targetCourse) throw Object.assign(new Error("해당 과목을 찾을 수 없습니다."), { status: 404 });
     const previousColor = targetCourse.color;
@@ -306,15 +248,14 @@ app.patch("/api/courses/:subject/color", async (request, response) => {
     });
   });
 
-  await mutationQueue;
-  response.json(publicData(store));
+  response.json(publicData(savedStore));
 });
 
 app.post("/api/migrate", async (request, response) => {
   const legacySchedules = request.body?.schedules ?? [];
   let migrationResult = { migrated: false, importedCount: 0 };
 
-  await runMutation((nextStore) => {
+  const savedStore = await runMutation((nextStore) => {
     if (nextStore.migrationCompleted) {
       migrationResult = { ...migrationResult, reason: "already-completed" };
       return;
@@ -356,8 +297,7 @@ app.post("/api/migrate", async (request, response) => {
     }
   });
 
-  await mutationQueue;
-  response.json({ ...migrationResult, data: publicData(store) });
+  response.json({ ...migrationResult, data: publicData(savedStore) });
 });
 
 app.get("/", (request, response, next) => {
@@ -381,19 +321,21 @@ app.get("/script.js", (request, response, next) => {
 app.use((error, request, response, next) => {
   console.error("요청 처리 중 오류가 발생했습니다.", error);
   if (response.headersSent) return next(error);
-  const status = error.status >= 400 && error.status < 500 ? error.status : 500;
+  const status = error.status >= 400 && (error.status < 500 || error.status === 503) ? error.status : 500;
   response.status(status).json({ error: status === 500 ? "서버에서 요청을 처리하지 못했습니다." : error.message });
 });
 
 async function startServer() {
-  store = await loadStore();
   const server = app.listen(port, host, () => {
     console.log(`Study Planner is running at http://${host}:${server.address().port}`);
-    console.log(`Persistent data file: ${dataFile}`);
   });
 }
 
-startServer().catch((error) => {
-  console.error("Study Planner 서버를 시작하지 못했습니다.", error);
-  process.exitCode = 1;
-});
+// Vercel imports the app without opening a port or writing to its filesystem.
+module.exports = app;
+if (require.main === module) {
+  startServer().catch((error) => {
+    console.error("Study Planner 서버를 시작하지 못했습니다.", error);
+    process.exitCode = 1;
+  });
+}

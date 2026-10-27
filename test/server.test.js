@@ -14,7 +14,7 @@ test('server persists schedules and course settings across restarts', async () =
     let errors = "";
     child = spawn(process.execPath, ['server.js'], {
       cwd: path.join(__dirname, '..'),
-      env: { ...process.env, PORT: '0', STUDY_PLANNER_DATA_DIR: directory },
+      env: { ...process.env, VERCEL: "", DATABASE_URL: "", POSTGRES_URL: "", PORT: '0', STUDY_PLANNER_DATA_DIR: directory },
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     child.stderr.on("data", (chunk) => { errors += chunk; });
